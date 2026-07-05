@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Booking Successful</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="success-page">
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="index.html">
+        <span class="brand-mark">UC</span>
+        <span>UrbanChimney</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <section class="form-card success-card">
+      <div class="success-hero">
+        <div class="success-badge"><i class="fa-solid fa-check"></i></div>
+        <div>
+          <p class="success-chip">✅ Booking Confirmed Successfully</p>
+          <h1>Your service is on its way</h1>
+          <p class="success-copy">Thank you for choosing Urban Chimney. Your booking has been received successfully. Our technician will contact you shortly.</p>
+        </div>
+      </div>
+      <div class="success-summary">
+        <div class="summary-card success-summary-card">
+          <span class="summary-label">Booking ID</span>
+          <strong id="successBookingId"></strong>
+        </div>
+        <div class="summary-card success-summary-card">
+          <span class="summary-label">Customer Name</span>
+          <strong id="successCustomerName"></strong>
+        </div>
+        <div class="summary-card success-summary-card">
+          <span class="summary-label">Mobile Number</span>
+          <strong id="successMobile"></strong>
+        </div>
+        <div class="summary-card success-summary-card">
+          <span class="summary-label">Service</span>
+          <strong id="successService"></strong>
+        </div>
+        <div class="summary-card success-summary-card">
+          <span class="summary-label">Booking Date</span>
+          <strong id="successDate"></strong>
+        </div>
+        <div class="summary-card success-summary-card">
+          <span class="summary-label">Booking Time</span>
+          <strong id="successTime"></strong>
+        </div>
+        <div class="summary-card success-summary-card">
+          <span class="summary-label">Address</span>
+          <strong id="successAddress"></strong>
+        </div>
+        <div class="summary-card success-summary-card">
+          <span class="summary-label">Payment Method</span>
+          <strong id="successPayment"></strong>
+        </div>
+        <div class="summary-card success-summary-card">
+          <span class="summary-label">Booking Status</span>
+          <strong id="successStatus"></strong>
+        </div>
+        <div class="summary-card success-summary-card">
+          <span class="summary-label">Amount</span>
+          <strong id="successAmount"></strong>
+        </div>
+      </div>
+      <div class="success-actions">
+        <button class="btn btn-primary" type="button" id="downloadReceiptButton">Download Receipt</button>
+        <a class="btn btn-secondary" href="track.html">Track Booking</a>
+        <a class="btn btn-secondary" href="home.html">Back to Home</a>
+      </div>
+    </section>
+  </main>
+  <footer class="footer">
+    <div class="footer-brand">
+      <span class="brand-mark">UC</span>
+      <span>UrbanChimney</span>
+    </div>
+    <p>UrbanChimney © 2026 • Trusted citywide service.</p>
+  </footer>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script src="email-service.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

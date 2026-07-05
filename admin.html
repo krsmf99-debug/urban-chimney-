@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Owner Dashboard | UrbanChimney</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+</head>
+<body class="admin-page">
+  <header class="site-header admin-header">
+    <div class="header-inner">
+      <a class="brand" href="admin.html">
+        <span class="brand-mark">UC</span>
+        <span>Owner Dashboard</span>
+      </a>
+      <div class="admin-header-actions">
+        <button class="btn btn-secondary" type="button" id="logoutButton"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-shell admin-shell">
+    <section class="admin-summary-card">
+      <div>
+        <p class="eyebrow-text">Owner Overview</p>
+        <h1>Clean bookings dashboard</h1>
+        <p class="muted">Track the most important numbers for today in one place.</p>
+      </div>
+      <button class="btn btn-secondary" type="button" id="resetBookingsButton"><i class="fa-solid fa-trash-can"></i> Reset demo bookings</button>
+    </section>
+
+    <section class="dashboard-grid admin-cards" id="adminStats"></section>
+
+    <section class="form-card admin-bookings-card">
+      <div class="section-title">
+        <div>
+          <h2>Booking list</h2>
+          <p class="muted">Search, filter, and manage active customer bookings.</p>
+        </div>
+      </div>
+      <div class="admin-toolbar">
+        <input id="adminSearchInput" type="search" placeholder="Search by customer, mobile or booking ID" />
+        <div class="filter-group">
+          <button class="filter-btn active" data-filter="today">Today's Bookings</button>
+          <button class="filter-btn" data-filter="pending">Pending</button>
+          <button class="filter-btn" data-filter="completed">Completed</button>
+        </div>
+      </div>
+      <div id="adminBookingsTable" class="admin-table-wrap"></div>
+      <div class="notice" id="adminEmptyState">No matching bookings found.</div>
+    </section>
+  </main>
+
+  <footer class="footer admin-footer">
+    <div class="footer-brand">
+      <span class="brand-mark">UC</span>
+      <span>UrbanChimney</span>
+    </div>
+    <p>UrbanChimney © 2026 • Owner dashboard.</p>
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>
