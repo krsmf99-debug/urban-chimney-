@@ -25,25 +25,27 @@
 
   <main class="page-shell admin-shell">
     <section class="admin-summary-card">
-      <div>
+      <div class="admin-summary-copy">
         <p class="eyebrow-text">Owner Overview</p>
-        <h1>Clean bookings dashboard</h1>
-        <p class="muted">Track the most important numbers for today in one place.</p>
+        <h1>Operations Dashboard</h1>
+        <p class="muted">Monitor bookings, service status, and customer updates from one streamlined workspace.</p>
       </div>
-      <button class="btn btn-secondary" type="button" id="resetBookingsButton"><i class="fa-solid fa-trash-can"></i> Reset demo bookings</button>
+      <div class="admin-summary-actions">
+        <button class="btn btn-secondary" type="button" id="resetBookingsButton"><i class="fa-solid fa-trash-can"></i> Reset demo bookings</button>
+      </div>
     </section>
 
     <section class="dashboard-grid admin-cards" id="adminStats"></section>
 
     <section class="form-card admin-bookings-card">
-      <div class="section-title">
+      <div class="section-title admin-panel-header">
         <div>
-          <h2>Booking list</h2>
-          <p class="muted">Search, filter, and manage active customer bookings.</p>
+          <h2>Booking Management</h2>
+          <p class="muted">Search, filter, and manage active customer bookings with a clear admin workflow.</p>
         </div>
       </div>
       <div class="admin-toolbar">
-        <input id="adminSearchInput" type="search" placeholder="Search by customer, mobile or booking ID" />
+        <input id="adminSearchInput" type="search" placeholder="Search" />
         <input id="adminPhoneSearch" type="search" placeholder="Phone" />
         <select id="adminStatusFilter">
           <option value="all">All statuses</option>
@@ -61,9 +63,9 @@
           <option value="Technician 3">Technician 3</option>
         </select>
         <input id="adminDateFilter" type="date" />
-        <div class="filter-group">
+        <div class="filter-group" aria-label="Booking filters">
           <button class="filter-btn active" data-filter="all">All</button>
-          <button class="filter-btn" data-filter="today">Today's Bookings</button>
+          <button class="filter-btn" data-filter="today">Today</button>
           <button class="filter-btn" data-filter="pending">Pending</button>
           <button class="filter-btn" data-filter="completed">Completed</button>
         </div>

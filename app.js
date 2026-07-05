@@ -22,6 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
     bookingAmount: 'bookingAmount',
     bookingPriceLabel: 'bookingPriceLabel',
     customerEmail: 'customerEmail',
+    customerAddress: 'customerAddress',
+    profileImage: 'customerProfileImage',
     bookingTime: 'bookingTime'
   };
 
@@ -43,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let adminDrafts = {};
 
   const clearCustomerSession = () => {
-    [AUTH_KEYS.active, AUTH_KEYS.loginTime, AUTH_KEYS.sessionExpiry, AUTH_KEYS.mobile, AUTH_KEYS.name, AUTH_KEYS.city].forEach((key) => localStorage.removeItem(key));
+    [AUTH_KEYS.active, AUTH_KEYS.loginTime, AUTH_KEYS.sessionExpiry, AUTH_KEYS.mobile, AUTH_KEYS.name, AUTH_KEYS.city, AUTH_KEYS.customerEmail, AUTH_KEYS.customerAddress, AUTH_KEYS.profileImage].forEach((key) => localStorage.removeItem(key));
   };
 
   const clearOwnerSession = () => {
@@ -57,6 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem(AUTH_KEYS.sessionExpiry, String(Date.now() + SESSION_DURATION_MS));
     localStorage.setItem(AUTH_KEYS.name, localStorage.getItem(AUTH_KEYS.name) || 'Guest');
     localStorage.setItem(AUTH_KEYS.city, localStorage.getItem(AUTH_KEYS.city) || 'Not provided');
+    localStorage.setItem(AUTH_KEYS.customerEmail, localStorage.getItem(AUTH_KEYS.customerEmail) || '');
+    localStorage.setItem(AUTH_KEYS.customerAddress, localStorage.getItem(AUTH_KEYS.customerAddress) || '');
   };
 
   const saveOwnerSession = () => {
@@ -204,7 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const clearAuthState = () => {
-    [AUTH_KEYS.active, AUTH_KEYS.loginTime, AUTH_KEYS.sessionExpiry, AUTH_KEYS.ownerActive, AUTH_KEYS.ownerLoginTime, AUTH_KEYS.ownerSessionExpiry, AUTH_KEYS.mobile, AUTH_KEYS.name, AUTH_KEYS.city, AUTH_KEYS.bookingId, AUTH_KEYS.selectedService, AUTH_KEYS.address, AUTH_KEYS.date, AUTH_KEYS.time, AUTH_KEYS.location, AUTH_KEYS.paymentMethod, AUTH_KEYS.paymentStatus, AUTH_KEYS.bookingAmount, AUTH_KEYS.bookingPriceLabel, AUTH_KEYS.customerEmail, AUTH_KEYS.bookingTime].forEach((key) => localStorage.removeItem(key));
+    [AUTH_KEYS.active, AUTH_KEYS.loginTime, AUTH_KEYS.sessionExpiry, AUTH_KEYS.ownerActive, AUTH_KEYS.ownerLoginTime, AUTH_KEYS.ownerSessionExpiry, AUTH_KEYS.mobile, AUTH_KEYS.name, AUTH_KEYS.city, AUTH_KEYS.bookingId, AUTH_KEYS.selectedService, AUTH_KEYS.address, AUTH_KEYS.date, AUTH_KEYS.time, AUTH_KEYS.location, AUTH_KEYS.paymentMethod, AUTH_KEYS.paymentStatus, AUTH_KEYS.bookingAmount, AUTH_KEYS.bookingPriceLabel, AUTH_KEYS.customerEmail, AUTH_KEYS.customerAddress, AUTH_KEYS.profileImage, AUTH_KEYS.bookingTime].forEach((key) => localStorage.removeItem(key));
   };
 
   const requestOtp = async (mobile) => new Promise((resolve) => {
@@ -549,15 +553,25 @@ document.addEventListener('DOMContentLoaded', () => {
       { id: 'profileName', value: localStorage.getItem(AUTH_KEYS.name) || 'Guest' },
       { id: 'profileMobile', value: localStorage.getItem(AUTH_KEYS.mobile) || 'Not available' },
       { id: 'profileCity', value: localStorage.getItem(AUTH_KEYS.city) || 'Not provided' },
+      { id: 'profileEmail', value: localStorage.getItem(AUTH_KEYS.customerEmail) || '' },
+      { id: 'profileAddress', value: localStorage.getItem(AUTH_KEYS.customerAddress) || '' },
       { id: 'settingsName', value: localStorage.getItem(AUTH_KEYS.name) || 'Guest' },
       { id: 'settingsMobile', value: localStorage.getItem(AUTH_KEYS.mobile) || 'Not available' },
-      { id: 'settingsCity', value: localStorage.getItem(AUTH_KEYS.city) || 'Not provided' }
+      { id: 'settingsCity', value: localStorage.getItem(AUTH_KEYS.city) || 'Not provided' },
+      { id: 'settingsEmail', value: localStorage.getItem(AUTH_KEYS.customerEmail) || '' },
+      { id: 'settingsAddress', value: localStorage.getItem(AUTH_KEYS.customerAddress) || '' }
     ];
 
     fields.forEach(({ id, value }) => {
       const element = document.getElementById(id);
       if (element) element.value = value;
     });
+
+    const avatar = document.querySelector('.profile-avatar');
+    const avatarValue = localStorage.getItem(AUTH_KEYS.profileImage);
+    if (avatar && avatarValue) {
+      avatar.src = avatarValue;
+    }
   };
 
   const renderBookingHistory = () => {
@@ -571,12 +585,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     list.innerHTML = history.map((item) => `
-      <div class="history-item">
+      <div class="history-item history-card">
         <div>
-          <strong>${item.service}</strong>
-          <p>${item.address}</p>
+          <strong>${escapeHtml(item.service || 'Service')}</strong>
+          <p>${escapeHtml(item.address || 'Address not provided')}</p>
+          <div class="booking-pill-row">
+            <span class="booking-pill">${escapeHtml(item.date || 'Scheduled')}</span>
+            <span class="booking-pill">${escapeHtml(item.time || 'As scheduled')}</span>
+            <span class="booking-pill">${escapeHtml(item.bookingStatus || 'Pending')}</span>
+          </div>
         </div>
-        <span>${item.date} • ${item.time}</span>
+        <div class="history-actions">
+          <button class="btn btn-secondary btn-small" type="button" data-action="view-booking" data-id="${item.id}">View Details</button>
+          <button class="btn btn-secondary btn-small" type="button" data-action="reschedule-booking" data-id="${item.id}">Reschedule</button>
+          <button class="btn btn-danger btn-small" type="button" data-action="cancel-booking" data-id="${item.id}">Cancel</button>
+        </div>
       </div>
     `).join('');
   };
@@ -1365,11 +1388,104 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
+  const initProfileExperience = () => {
+    const avatarInput = document.getElementById('profileImageInput');
+    const removeAvatarButton = document.getElementById('removeProfileImageButton');
+    const saveSettingsButton = document.getElementById('saveSettingsButton');
+    const settingsForm = document.getElementById('settingsForm');
+    const profileAvatar = document.querySelector('.profile-avatar');
+
+    if (avatarInput && profileAvatar) {
+      avatarInput.addEventListener('change', (event) => {
+        const [file] = event.target.files || [];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result;
+          localStorage.setItem(AUTH_KEYS.profileImage, dataUrl);
+          profileAvatar.src = dataUrl;
+          showToast('Profile photo updated.', 'success');
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    if (removeAvatarButton && profileAvatar) {
+      removeAvatarButton.addEventListener('click', () => {
+        localStorage.removeItem(AUTH_KEYS.profileImage);
+        profileAvatar.src = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80';
+        showToast('Profile photo removed.', 'success');
+      });
+    }
+
+    if (saveSettingsButton && settingsForm) {
+      saveSettingsButton.addEventListener('click', () => {
+        const name = document.getElementById('settingsName')?.value.trim() || 'Guest';
+        const mobile = document.getElementById('settingsMobile')?.value.trim() || '';
+        const email = document.getElementById('settingsEmail')?.value.trim() || '';
+        const address = document.getElementById('settingsAddress')?.value.trim() || '';
+
+        if (!/^[0-9]{10}$/.test(mobile)) {
+          showToast('Please enter a valid 10-digit mobile number.', 'error');
+          return;
+        }
+
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          showToast('Please enter a valid email address.', 'error');
+          return;
+        }
+
+        localStorage.setItem(AUTH_KEYS.name, name);
+        localStorage.setItem(AUTH_KEYS.mobile, mobile);
+        localStorage.setItem(AUTH_KEYS.customerEmail, email);
+        localStorage.setItem(AUTH_KEYS.customerAddress, address);
+        localStorage.setItem(AUTH_KEYS.city, document.getElementById('settingsCity')?.value.trim() || 'Not provided');
+        fillProfileFields();
+        renderHomeDashboard();
+        renderBookingHistory();
+        showToast('Profile settings saved successfully.', 'success');
+      });
+    }
+
+    document.getElementById('bookingHistoryList')?.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      const bookingId = button.dataset.id;
+      const action = button.dataset.action;
+      if (action === 'cancel-booking') {
+        const shouldCancel = window.confirm('Cancel this booking?');
+        if (!shouldCancel) return;
+        updateBookingRecord(bookingId, { bookingStatus: 'Cancelled', paymentStatus: 'Refund Pending' });
+        renderBookingHistory();
+        renderAdminPanel();
+        showToast('Booking cancelled successfully.', 'success');
+      }
+      if (action === 'reschedule-booking') {
+        const booking = getBookingHistory().find((item) => item.id === bookingId);
+        if (!booking) return;
+        const nextDate = window.prompt('Select a new date (YYYY-MM-DD)', booking.date || '');
+        if (!nextDate) return;
+        const nextTime = window.prompt('Select a new time (HH:MM)', booking.time || '');
+        if (!nextTime) return;
+        updateBookingRecord(bookingId, { date: nextDate, time: nextTime, bookingStatus: 'Pending' });
+        renderBookingHistory();
+        renderAdminPanel();
+        showToast('Booking rescheduled successfully.', 'success');
+      }
+      if (action === 'view-booking') {
+        const booking = getBookingHistory().find((item) => item.id === bookingId);
+        if (!booking) return;
+        window.alert(`Booking ID: ${booking.id}\nService: ${booking.service}\nDate: ${booking.date}\nTime: ${booking.time}\nStatus: ${booking.bookingStatus}\nTechnician: ${booking.technician || 'Pending'}\nAddress: ${booking.address}`);
+      }
+    });
+  };
+
   initAuth();
   initHeaderActions();
   initDrawerMenu();
   initLogin();
   initLocation();
+  initProfileExperience();
   fillProfileFields();
   renderBookingHistory();
   renderTracking();

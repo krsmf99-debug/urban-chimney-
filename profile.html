@@ -30,12 +30,17 @@
 
   <main class="page-shell">
     <section class="profile-card form-card">
-      <div>
+      <div class="profile-hero">
         <img class="profile-avatar" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80" alt="Happy professional customer avatar">
+        <div class="profile-actions">
+          <label class="btn btn-primary" for="profileImageInput">Upload Image</label>
+          <input id="profileImageInput" type="file" accept="image/*" hidden>
+          <button class="btn btn-secondary" type="button" id="removeProfileImageButton">Remove Photo</button>
+        </div>
       </div>
       <div>
         <h2>My profile</h2>
-        <p class="muted">Your saved customer details and recent visits appear here.</p>
+        <p class="muted">Manage your account details, service history, and saved preferences in one place.</p>
         <div class="form-grid">
           <div class="full-width">
             <label for="profileName">Name</label>
@@ -49,10 +54,18 @@
             <label for="profileCity">City</label>
             <input type="text" id="profileCity" readonly>
           </div>
+          <div class="full-width">
+            <label for="profileEmail">Email</label>
+            <input type="email" id="profileEmail" readonly>
+          </div>
+          <div class="full-width">
+            <label for="profileAddress">Address</label>
+            <input type="text" id="profileAddress" readonly>
+          </div>
         </div>
         <div class="inline-actions">
-          <a class="btn btn-primary" href="track.html">My bookings</a>
-          <a class="btn btn-secondary" href="home.html">Back home</a>
+          <a class="btn btn-primary" href="bookings.html">My bookings</a>
+          <a class="btn btn-secondary" href="settings.html">Edit settings</a>
         </div>
         <div class="notice" id="bookingHistoryList"></div>
       </div>
