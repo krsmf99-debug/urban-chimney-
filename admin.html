@@ -44,8 +44,26 @@
       </div>
       <div class="admin-toolbar">
         <input id="adminSearchInput" type="search" placeholder="Search by customer, mobile or booking ID" />
+        <input id="adminPhoneSearch" type="search" placeholder="Phone" />
+        <select id="adminStatusFilter">
+          <option value="all">All statuses</option>
+          <option value="Pending">Pending</option>
+          <option value="Technician Assigned">Technician Assigned</option>
+          <option value="On The Way">On The Way</option>
+          <option value="Holding">Holding</option>
+          <option value="Completed">Completed</option>
+          <option value="Cancelled">Cancelled</option>
+        </select>
+        <select id="adminTechnicianFilter">
+          <option value="all">All technicians</option>
+          <option value="Technician 1">Technician 1</option>
+          <option value="Technician 2">Technician 2</option>
+          <option value="Technician 3">Technician 3</option>
+        </select>
+        <input id="adminDateFilter" type="date" />
         <div class="filter-group">
-          <button class="filter-btn active" data-filter="today">Today's Bookings</button>
+          <button class="filter-btn active" data-filter="all">All</button>
+          <button class="filter-btn" data-filter="today">Today's Bookings</button>
           <button class="filter-btn" data-filter="pending">Pending</button>
           <button class="filter-btn" data-filter="completed">Completed</button>
         </div>

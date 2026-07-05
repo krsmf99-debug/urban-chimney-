@@ -34,7 +34,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   let adminSearchQuery = '';
-  let adminFilterType = 'today';
+  let adminFilterType = 'all';
+  let adminPhoneSearchQuery = '';
+  let adminStatusFilter = 'all';
+  let adminTechnicianFilter = 'all';
+  let adminDateFilter = '';
+  let adminEditingBookingId = null;
+  let adminDrafts = {};
 
   const clearCustomerSession = () => {
     [AUTH_KEYS.active, AUTH_KEYS.loginTime, AUTH_KEYS.sessionExpiry, AUTH_KEYS.mobile, AUTH_KEYS.name, AUTH_KEYS.city].forEach((key) => localStorage.removeItem(key));
@@ -227,6 +233,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1000);
   };
 
+  const normalizeBookingStatus = (status = 'Pending') => {
+    const normalized = String(status || 'Pending').trim();
+    if (normalized === 'Technician On The Way') return 'On The Way';
+    if (normalized === 'Booking On Hold') return 'Holding';
+    if (normalized === 'Service Completed') return 'Completed';
+    if (normalized === 'Booking Cancelled') return 'Cancelled';
+    return normalized || 'Pending';
+  };
+
+  const escapeHtml = (value = '') => String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
   const getBookingHistory = () => {
     try {
       return JSON.parse(localStorage.getItem(AUTH_KEYS.bookingHistory) || '[]');
@@ -245,11 +267,62 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  const normalizeBookingRecord = (booking = {}) => {
+    const service = booking.service || 'Chimney Basic Cleaning';
+    const bookingDate = booking.date || booking.serviceDate || '';
+    const bookingTimeValue = booking.time || '';
+    const createdAt = booking.createdAt || booking.bookingTime || new Date().toLocaleString();
+    const bookingAmount = booking.amount || booking.bookingAmount || '';
+    const priceLabel = booking.priceLabel || booking.bookingPriceLabel || getServicePriceLabel(service);
+
+    return {
+      id: booking.id || `UC-${Math.floor(10000 + Math.random() * 90000)}`,
+      service,
+      address: booking.address || 'Not provided',
+      date: bookingDate,
+      time: bookingTimeValue,
+      city: booking.city || 'Not provided',
+      mobile: booking.mobile || 'N/A',
+      customerName: booking.customerName || 'Guest',
+      amount: bookingAmount,
+      priceLabel,
+      paymentMethod: booking.paymentMethod || 'Pending selection',
+      paymentStatus: booking.paymentStatus || 'Pending',
+      bookingStatus: normalizeBookingStatus(booking.bookingStatus || 'Pending'),
+      bookingTime: booking.bookingTime || createdAt,
+      createdAt,
+      serviceDate: booking.serviceDate || bookingDate,
+      technician: booking.technician || '',
+      notes: booking.notes || '',
+      customerEmail: booking.customerEmail || '',
+      emailSent: Boolean(booking.emailSent)
+    };
+  };
+
   const saveBookingHistory = (booking) => {
+    const normalized = normalizeBookingRecord(booking);
     const history = getBookingHistory();
-    history.unshift(booking);
+    const existingIndex = history.findIndex((item) => item.id === normalized.id);
+    if (existingIndex >= 0) {
+      history[existingIndex] = normalized;
+    } else {
+      history.unshift(normalized);
+    }
     localStorage.setItem(AUTH_KEYS.bookingHistory, JSON.stringify(history));
     notifyBookingHistoryChanged();
+    return normalized;
+  };
+
+  const updateBookingRecord = (bookingId, updates = {}) => {
+    const history = getBookingHistory();
+    const existingBooking = history.find((item) => item.id === bookingId);
+    if (!existingBooking) return null;
+
+    const updatedBooking = normalizeBookingRecord({ ...existingBooking, ...updates, id: bookingId });
+    const nextHistory = history.map((item) => (item.id === bookingId ? updatedBooking : item));
+    localStorage.setItem(AUTH_KEYS.bookingHistory, JSON.stringify(nextHistory));
+    notifyBookingHistoryChanged();
+    return updatedBooking;
   };
 
   const formatLocalDate = (dateString) => {
@@ -287,89 +360,26 @@ document.addEventListener('DOMContentLoaded', () => {
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  const buildAdminBookingSections = (history, options = {}) => {
-    const searchQuery = (options.searchQuery || '').trim().toLowerCase();
-    const filterType = options.filterType || 'all';
-
-    const filteredHistory = history.filter((booking) => {
-      const searchText = [booking.customerName, booking.mobile, booking.id, booking.service, booking.address]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      const matchesSearch = !searchQuery || searchText.includes(searchQuery);
-      if (!matchesSearch) return false;
-
-      if (filterType === 'today') {
-        return booking.bookingStatus !== 'Completed' && isSameDay(getBookingDateValue(booking), new Date());
-      }
-      if (filterType === 'pending') {
-        return booking.bookingStatus !== 'Completed';
-      }
-      if (filterType === 'completed') {
-        return booking.bookingStatus === 'Completed';
-      }
-      return true;
-    });
-
-    const sections = [];
-    const sectionMap = new Map();
-    const completedBookings = [];
-
-    filteredHistory.forEach((booking) => {
-      if (booking.bookingStatus === 'Completed') {
-        completedBookings.push(booking);
-        return;
-      }
-
-      const bookingDateValue = getBookingDateValue(booking);
-      const bookingDate = bookingDateValue ? new Date(bookingDateValue) : null;
-      const isToday = bookingDate && isSameDay(bookingDate, new Date());
-      const sectionLabel = isToday ? "Today's Bookings" : formatBookingDateLabel(bookingDateValue);
-      const sectionKey = isToday ? '__today__' : `${bookingDateValue || 'unscheduled'}:${sectionLabel}`;
-
-      if (!sectionMap.has(sectionKey)) {
-        sectionMap.set(sectionKey, {
-          label: sectionLabel,
-          sortValue: isToday ? 0 : getBookingDateTimestamp(bookingDateValue),
-          bookings: []
-        });
-      }
-
-      sectionMap.get(sectionKey).bookings.push(booking);
-    });
-
-    sections.push(...Array.from(sectionMap.values()).sort((left, right) => left.sortValue - right.sortValue));
-
-    return { sections, completedBookings };
-  };
-
   const STATUS_FLOW = [
     { key: 'Pending', label: 'Pending', badgeClass: 'pending', tone: 'yellow', summary: 'Waiting for confirmation.', message: 'Waiting for confirmation.' },
     { key: 'Technician Assigned', label: 'Technician Assigned', badgeClass: 'assigned', tone: 'blue', summary: 'Technician has been assigned.', message: 'Technician has been assigned.' },
-    { key: 'Technician On The Way', label: 'Technician On The Way', badgeClass: 'on-the-way', tone: 'orange', summary: 'Technician is on the way to your location.', message: 'Technician is on the way to your location.' },
-    { key: 'Booking On Hold', label: 'Booking On Hold', badgeClass: 'on-hold', tone: 'purple', summary: 'Your booking is temporarily on hold. Please wait while we update your schedule.', message: 'Your booking is temporarily on hold. Please wait while we update your schedule.' },
-    { key: 'Service Started', label: 'Service Started', badgeClass: 'started', tone: 'cyan', summary: 'Our technician has started the service.', message: 'Our technician has started the service.' },
-    { key: 'Service Completed', label: 'Service Completed', badgeClass: 'completed', tone: 'green', summary: 'Your service has been completed successfully.', message: 'Your service has been completed successfully.' },
-    { key: 'Booking Cancelled', label: 'Booking Cancelled', badgeClass: 'cancelled', tone: 'red', summary: 'Your booking has been cancelled.', message: 'Your booking has been cancelled.' }
+    { key: 'On The Way', label: 'On The Way', badgeClass: 'on-the-way', tone: 'orange', summary: 'Technician is on the way to your location.', message: 'Technician is on the way to your location.' },
+    { key: 'Holding', label: 'Holding', badgeClass: 'on-hold', tone: 'purple', summary: 'Your booking is temporarily on hold.', message: 'Your booking is temporarily on hold.' },
+    { key: 'Completed', label: 'Completed', badgeClass: 'completed', tone: 'green', summary: 'Your service has been completed successfully.', message: 'Your service has been completed successfully.' },
+    { key: 'Cancelled', label: 'Cancelled', badgeClass: 'cancelled', tone: 'red', summary: 'Your booking has been cancelled.', message: 'Your booking has been cancelled.' }
   ];
 
-  const getBookingStatusMeta = (status = 'Pending') => STATUS_FLOW.find((entry) => entry.key === status) || STATUS_FLOW[0];
+  const TECHNICIAN_OPTIONS = ['Select Technician', 'Technician 1', 'Technician 2', 'Technician 3'];
+
+  const getBookingStatusMeta = (status = 'Pending') => STATUS_FLOW.find((entry) => entry.key === normalizeBookingStatus(status)) || STATUS_FLOW[0];
 
   const updateBookingStatus = (bookingId, status) => {
-    const history = getBookingHistory();
-    const updatedHistory = history.map((booking) => {
-      if (booking.id === bookingId) {
-        return { ...booking, bookingStatus: status };
-      }
-      return booking;
-    });
-    localStorage.setItem(AUTH_KEYS.bookingHistory, JSON.stringify(updatedHistory));
-    localStorage.setItem(AUTH_KEYS.bookingStatus, status);
-    notifyBookingHistoryChanged();
+    const updatedBooking = updateBookingRecord(bookingId, { bookingStatus: normalizeBookingStatus(status) });
+    localStorage.setItem(AUTH_KEYS.bookingStatus, normalizeBookingStatus(status));
     renderAdminPanel();
     renderTracking();
     renderSuccessPage();
-    return updatedHistory.find((booking) => booking.id === bookingId) || null;
+    return updatedBooking;
   };
 
   const deleteBooking = (bookingId) => {
@@ -379,52 +389,141 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAdminPanel();
   };
 
-  const getBookingCardMarkup = (item) => {
-    const currentStatus = item.bookingStatus || 'Pending';
-    const statusMeta = getBookingStatusMeta(currentStatus);
-    const isCancelled = currentStatus === 'Booking Cancelled';
-    const isCompleted = currentStatus === 'Service Completed';
-    const statusButtons = STATUS_FLOW.filter((entry) => entry.key !== 'Pending' && entry.key !== 'Booking Cancelled').map((entry) => `
-      <button class="btn btn-status btn-small ${entry.key === currentStatus ? 'active' : ''}" data-action="update-status" data-id="${item.id}" data-status="${entry.key}">${entry.label}</button>
-    `).join('');
+  const getAdminFilteredBookings = (history) => {
+    const searchQuery = adminSearchQuery.trim().toLowerCase();
+    const phoneQuery = adminPhoneSearchQuery.trim().toLowerCase();
+    const dateQuery = adminDateFilter;
+    const statusQuery = adminStatusFilter;
+    const technicianQuery = adminTechnicianFilter;
+    const filterMode = adminFilterType || 'all';
 
-    return `
-      <article class="admin-booking-card ${isCompleted ? 'booking-completed' : currentStatus === 'Pending' ? 'booking-pending' : ''}">
-        <div class="admin-booking-card-header">
-          <div>
-            <span class="booking-id">${item.id}</span>
-            <span class="booking-status badge badge-${statusMeta.badgeClass}">${currentStatus}</span>
-          </div>
-          <div class="booking-actions">
-            <button class="btn btn-secondary btn-small toggle-details" data-action="toggle-details" data-id="${item.id}">View Details</button>
-            <button class="btn btn-danger btn-small" data-action="delete-booking" data-id="${item.id}">Delete</button>
-          </div>
+    const filtered = history.filter((booking) => {
+      const normalizedStatus = normalizeBookingStatus(booking.bookingStatus || 'Pending');
+      const bookingDateValue = getBookingDateValue(booking);
+      const searchText = [booking.customerName, booking.mobile, booking.id, booking.service, booking.address]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      const matchesSearch = !searchQuery || searchText.includes(searchQuery);
+      const matchesPhone = !phoneQuery || String(booking.mobile || '').toLowerCase().includes(phoneQuery);
+      const matchesStatus = statusQuery === 'all' || normalizedStatus === statusQuery;
+      const matchesTechnician = technicianQuery === 'all' || (booking.technician || '') === technicianQuery;
+      const matchesDate = !dateQuery || bookingDateValue === dateQuery;
+      const matchesMode = filterMode === 'all'
+        || (filterMode === 'today' && isSameDay(bookingDateValue, new Date()))
+        || (filterMode === 'pending' && normalizedStatus !== 'Completed' && normalizedStatus !== 'Cancelled')
+        || (filterMode === 'completed' && normalizedStatus === 'Completed');
+      return matchesSearch && matchesPhone && matchesStatus && matchesTechnician && matchesDate && matchesMode;
+    });
+
+    return filtered.sort((left, right) => {
+      const leftTime = new Date(left.createdAt || left.bookingTime || 0).getTime();
+      const rightTime = new Date(right.createdAt || right.bookingTime || 0).getTime();
+      if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) return 0;
+      return rightTime - leftTime;
+    });
+  };
+
+  const renderAdminPanel = () => {
+    const statsContainer = document.getElementById('adminStats');
+    const emptyState = document.getElementById('adminEmptyState');
+    const tableWrap = document.getElementById('adminBookingsTable');
+    if (!statsContainer && !emptyState && !tableWrap) return;
+
+    const history = getBookingHistory();
+    const visibleBookings = getAdminFilteredBookings(history);
+    const pendingBookings = history.filter((booking) => normalizeBookingStatus(booking.bookingStatus || 'Pending') !== 'Completed' && normalizeBookingStatus(booking.bookingStatus || 'Pending') !== 'Cancelled');
+    const completedBookings = history.filter((booking) => normalizeBookingStatus(booking.bookingStatus || 'Pending') === 'Completed');
+    const todayRevenue = history
+      .filter((booking) => normalizeBookingStatus(booking.bookingStatus || 'Pending') === 'Completed' && isSameDay(getBookingDateValue(booking), new Date()))
+      .reduce((sum, booking) => sum + Number(booking.amount || booking.bookingAmount || 0), 0);
+
+    if (statsContainer) {
+      statsContainer.innerHTML = `
+        <div class="stat-card admin-stat-card">
+          <span class="stat-label">Total Bookings</span>
+          <strong>${history.length}</strong>
         </div>
-        <div class="booking-meta">
-          <div><span>Customer</span><strong>${item.customerName}</strong></div>
-          <div><span>Mobile</span><strong>${item.mobile}</strong></div>
-          <div><span>Service</span><strong>${item.service}</strong></div>
-          <div><span>Price</span><strong>₹${item.amount || item.bookingAmount || getServiceAmount(item.service)}</strong></div>
+        <div class="stat-card admin-stat-card">
+          <span class="stat-label">Active Bookings</span>
+          <strong>${pendingBookings.length}</strong>
         </div>
-        <div class="booking-meta booking-meta-row">
-          <div><span>Date</span><strong>${item.date || 'Not selected'}</strong></div>
-          <div><span>Time</span><strong>${item.time || 'Not selected'}</strong></div>
-          <div><span>Payment</span><strong>${item.paymentStatus || item.paymentMethod || 'Pending'}</strong></div>
+        <div class="stat-card admin-stat-card">
+          <span class="stat-label">Completed Bookings</span>
+          <strong>${completedBookings.length}</strong>
         </div>
-        <div class="booking-details" hidden>
-          <div class="detail-row"><span>Address</span><strong>${item.address}</strong></div>
-          <div class="detail-row"><span>Booking Time</span><strong>${item.bookingTime || '—'}</strong></div>
-        </div>
-        <div class="status-action-group">
-          ${statusButtons}
-          ${!isCancelled && !isCompleted ? `<button class="btn btn-danger btn-small" data-action="cancel-booking" data-id="${item.id}">Cancel Booking</button>` : ''}
-        </div>
-      </article>
-    `;
+        <div class="stat-card admin-stat-card">
+          <span class="stat-label">Today's Revenue</span>
+          <strong>₹${todayRevenue.toLocaleString()}</strong>
+        </div>`;
+    }
+
+    if (emptyState) {
+      emptyState.hidden = visibleBookings.length > 0;
+      emptyState.textContent = visibleBookings.length ? '' : 'No matching bookings found.';
+    }
+
+    if (tableWrap) {
+      if (!visibleBookings.length) {
+        tableWrap.innerHTML = '';
+        return;
+      }
+
+      tableWrap.innerHTML = `
+        <div class="admin-table-shell">
+          <table class="admin-bookings-table">
+            <thead>
+              <tr>
+                <th>Booking ID</th>
+                <th>Customer</th>
+                <th>Phone</th>
+                <th>Service</th>
+                <th>Date</th>
+                <th>Address</th>
+                <th>Technician</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${visibleBookings.map((booking) => {
+                const isEditing = adminEditingBookingId === booking.id;
+                const draft = adminDrafts[booking.id] || booking;
+                const statusMeta = getBookingStatusMeta(draft.bookingStatus || 'Pending');
+                const statusClass = `status-badge-${statusMeta.badgeClass}`;
+                return `
+                  <tr data-booking-id="${booking.id}">
+                    <td><strong>${escapeHtml(booking.id)}</strong><div class="meta-caption">Created ${escapeHtml(booking.createdAt || booking.bookingTime || '—')}</div></td>
+                    <td>${isEditing ? `<div class="edit-stack"><input data-edit-field="customerName" value="${escapeHtml(draft.customerName || '')}" /></div>` : `<div class="customer-name">${escapeHtml(booking.customerName || 'Guest')}</div>`}</td>
+                    <td>${isEditing ? `<input data-edit-field="mobile" value="${escapeHtml(draft.mobile || '')}" />` : escapeHtml(booking.mobile || 'N/A')}</td>
+                    <td>${isEditing ? `<input data-edit-field="service" value="${escapeHtml(draft.service || '')}" />` : escapeHtml(booking.service || 'Chimney Cleaning')}</td>
+                    <td>${isEditing ? `<input data-edit-field="date" type="date" value="${escapeHtml(draft.date || '')}" />` : escapeHtml(booking.date || '—')}</td>
+                    <td>${isEditing ? `<textarea data-edit-field="address">${escapeHtml(draft.address || '')}</textarea>` : escapeHtml(booking.address || 'Not provided')}</td>
+                    <td>${isEditing ? `<select data-edit-field="technician">${TECHNICIAN_OPTIONS.map((option) => `<option value="${option}" ${draft.technician === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select>` : escapeHtml(booking.technician || '—')}</td>
+                    <td>${isEditing ? `<div class="edit-stack"><select data-edit-field="bookingStatus">${STATUS_FLOW.map((item) => `<option value="${item.key}" ${normalizeBookingStatus(draft.bookingStatus || 'Pending') === item.key ? 'selected' : ''}>${escapeHtml(item.label)}</option>`).join('')}</select></div>` : `<span class="status-badge ${statusClass}">${escapeHtml(statusMeta.label)}</span>`}</td>
+                    <td>
+                      ${isEditing ? `
+                        <div class="table-actions">
+                          <button class="btn btn-primary btn-small" data-action="save-booking" data-id="${booking.id}">Save</button>
+                          <button class="btn btn-secondary btn-small" data-action="cancel-edit" data-id="${booking.id}">Cancel</button>
+                        </div>` : `
+                        <div class="table-actions">
+                          <button class="btn btn-secondary btn-small" data-action="edit-booking" data-id="${booking.id}">Edit</button>
+                          <button class="btn btn-danger btn-small" data-action="delete-booking" data-id="${booking.id}">Delete</button>
+                        </div>`}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
   };
 
   window.UrbanChimneyAdmin = {
-    buildAdminBookingSections
+    renderAdminPanel,
+    getAdminFilteredBookings
   };
 
   const getServiceDetails = (service) => {
@@ -482,89 +581,14 @@ document.addEventListener('DOMContentLoaded', () => {
     `).join('');
   };
 
-  const renderAdminPanel = () => {
-    const statsContainer = document.getElementById('adminStats');
-    const emptyState = document.getElementById('adminEmptyState');
-    const tableWrap = document.getElementById('adminBookingsTable');
-    if (!statsContainer && !emptyState && !tableWrap) return;
-
-    const history = getBookingHistory();
-    const todayBookings = history.filter((booking) => booking.bookingStatus !== 'Completed' && isSameDay(getBookingDateValue(booking), new Date()));
-    const pendingBookings = history.filter((booking) => booking.bookingStatus !== 'Completed');
-    const completedBookings = history.filter((booking) => booking.bookingStatus === 'Completed');
-    const todayRevenue = history
-      .filter((booking) => booking.bookingStatus === 'Completed' && isSameDay(getBookingDateValue(booking), new Date()))
-      .reduce((sum, booking) => sum + Number(booking.amount || booking.bookingAmount || 0), 0);
-
-    if (statsContainer) {
-      statsContainer.innerHTML = `
-        <div class="stat-card admin-stat-card">
-          <span class="stat-label">Today's Bookings</span>
-          <strong>${todayBookings.length}</strong>
-        </div>
-        <div class="stat-card admin-stat-card">
-          <span class="stat-label">Pending Bookings</span>
-          <strong>${pendingBookings.length}</strong>
-        </div>
-        <div class="stat-card admin-stat-card">
-          <span class="stat-label">Completed Bookings</span>
-          <strong>${completedBookings.length}</strong>
-        </div>
-        <div class="stat-card admin-stat-card">
-          <span class="stat-label">Today's Revenue</span>
-          <strong>₹${todayRevenue.toLocaleString()}</strong>
-        </div>`;
-    }
-
-    const { sections, completedBookings: filteredCompletedBookings } = buildAdminBookingSections(history, {
-      searchQuery: adminSearchQuery,
-      filterType: adminFilterType
-    });
-    const hasVisibleBookings = sections.some((section) => section.bookings.length) || filteredCompletedBookings.length;
-
-    if (emptyState) {
-      emptyState.hidden = hasVisibleBookings;
-      emptyState.textContent = hasVisibleBookings ? '' : 'No matching bookings found.';
-    }
-
-    if (tableWrap) {
-      if (!hasVisibleBookings) {
-        tableWrap.innerHTML = '';
-        return;
-      }
-
-      const sectionMarkup = [
-        ...sections.map((section) => `
-          <section class="admin-date-section">
-            <div class="admin-date-section-header">
-              <h3>${section.label}</h3>
-              <span>${section.bookings.length} booking${section.bookings.length === 1 ? '' : 's'}</span>
-            </div>
-            <div class="admin-date-section-body">
-              ${section.bookings.map((item) => getBookingCardMarkup(item)).join('')}
-            </div>
-          </section>
-        `),
-        filteredCompletedBookings.length ? `
-          <section class="admin-date-section completed-section">
-            <div class="admin-date-section-header">
-              <h3>Completed Bookings</h3>
-              <span>${filteredCompletedBookings.length} booking${filteredCompletedBookings.length === 1 ? '' : 's'}</span>
-            </div>
-            <div class="admin-date-section-body">
-              ${filteredCompletedBookings.map((item) => getBookingCardMarkup(item)).join('')}
-            </div>
-          </section>
-        ` : ''
-      ].filter(Boolean).join('');
-
-      tableWrap.innerHTML = sectionMarkup;
-    }
-  };
 
   const setupAdminPanel = () => {
     const resetButton = document.getElementById('resetBookingsButton');
     const searchInput = document.getElementById('adminSearchInput');
+    const phoneInput = document.getElementById('adminPhoneSearch');
+    const statusSelect = document.getElementById('adminStatusFilter');
+    const technicianSelect = document.getElementById('adminTechnicianFilter');
+    const dateInput = document.getElementById('adminDateFilter');
     const filterButtons = document.querySelectorAll('.filter-btn');
     const tableWrap = document.getElementById('adminBookingsTable');
     if (!resetButton || !tableWrap) return;
@@ -573,8 +597,17 @@ document.addEventListener('DOMContentLoaded', () => {
       [AUTH_KEYS.bookingHistory, AUTH_KEYS.bookingId, AUTH_KEYS.selectedService, AUTH_KEYS.address, AUTH_KEYS.date, AUTH_KEYS.time, AUTH_KEYS.location, AUTH_KEYS.paymentMethod, AUTH_KEYS.bookingAmount].forEach((key) => localStorage.removeItem(key));
       showToast('Demo bookings reset successfully.', 'success');
       adminSearchQuery = '';
-      adminFilterType = 'all';
+      adminPhoneSearchQuery = '';
+      adminStatusFilter = 'all';
+      adminTechnicianFilter = 'all';
+      adminDateFilter = '';
+      adminEditingBookingId = null;
+      adminDrafts = {};
       if (searchInput) searchInput.value = '';
+      if (phoneInput) phoneInput.value = '';
+      if (statusSelect) statusSelect.value = 'all';
+      if (technicianSelect) technicianSelect.value = 'all';
+      if (dateInput) dateInput.value = '';
       filterButtons.forEach((button) => button.classList.toggle('active', button.dataset.filter === 'all'));
       renderAdminPanel();
     });
@@ -582,6 +615,34 @@ document.addEventListener('DOMContentLoaded', () => {
     if (searchInput) {
       searchInput.addEventListener('input', (event) => {
         adminSearchQuery = event.target.value.trim();
+        renderAdminPanel();
+      });
+    }
+
+    if (phoneInput) {
+      phoneInput.addEventListener('input', (event) => {
+        adminPhoneSearchQuery = event.target.value.trim();
+        renderAdminPanel();
+      });
+    }
+
+    if (statusSelect) {
+      statusSelect.addEventListener('change', (event) => {
+        adminStatusFilter = event.target.value;
+        renderAdminPanel();
+      });
+    }
+
+    if (technicianSelect) {
+      technicianSelect.addEventListener('change', (event) => {
+        adminTechnicianFilter = event.target.value;
+        renderAdminPanel();
+      });
+    }
+
+    if (dateInput) {
+      dateInput.addEventListener('change', (event) => {
+        adminDateFilter = event.target.value;
         renderAdminPanel();
       });
     }
@@ -599,27 +660,44 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!button) return;
       const bookingId = button.dataset.id;
       const action = button.dataset.action;
-      if (action === 'toggle-details') {
-        const card = button.closest('.admin-booking-card');
-        const details = card?.querySelector('.booking-details');
-        if (details) details.hidden = !details.hidden;
+      if (action === 'edit-booking') {
+        const booking = getBookingHistory().find((item) => item.id === bookingId);
+        adminEditingBookingId = bookingId;
+        if (booking) {
+          adminDrafts[bookingId] = { ...booking };
+        }
+        renderAdminPanel();
       }
-      if (action === 'update-status') {
-        const status = button.dataset.status;
-        const confirmationMessage = `Are you sure you want to mark this booking as ${status}?`;
-        if (!window.confirm(confirmationMessage)) return;
-        updateBookingStatus(bookingId, status);
-        showToast('Booking status updated successfully.', 'success');
+      if (action === 'save-booking') {
+        const draft = adminDrafts[bookingId];
+        if (draft) {
+          saveBookingHistory({ ...draft, id: bookingId });
+          adminEditingBookingId = null;
+          delete adminDrafts[bookingId];
+          showToast('Booking updated successfully.', 'success');
+          renderAdminPanel();
+        }
       }
-      if (action === 'cancel-booking') {
-        if (!window.confirm('Are you sure you want to cancel this booking?')) return;
-        updateBookingStatus(bookingId, 'Booking Cancelled');
-        showToast('Booking status updated successfully.', 'success');
+      if (action === 'cancel-edit') {
+        adminEditingBookingId = null;
+        delete adminDrafts[bookingId];
+        renderAdminPanel();
       }
       if (action === 'delete-booking') {
         deleteBooking(bookingId);
         showToast('Booking deleted successfully.', 'success');
       }
+    });
+
+    tableWrap.addEventListener('change', (event) => {
+      const target = event.target;
+      const bookingId = target.closest('[data-booking-id]')?.dataset.bookingId;
+      if (!bookingId || !target.dataset.editField) return;
+      const draft = adminDrafts[bookingId] || getBookingHistory().find((item) => item.id === bookingId) || {};
+      adminDrafts[bookingId] = { ...draft, [target.dataset.editField]: target.value };
+      saveBookingHistory({ ...adminDrafts[bookingId], id: bookingId });
+      renderAdminPanel();
+      showToast('Booking updated instantly.', 'success');
     });
   };
 
@@ -661,14 +739,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (timelineEl) {
       const steps = [
-        { label: 'Pending', description: 'Your service request is confirmed.', active: ['Pending', 'Technician Assigned', 'Technician On The Way', 'Booking On Hold', 'Service Started', 'Service Completed', 'Booking Cancelled'].includes(bookingStatus) },
-        { label: 'Technician Assigned', description: 'A verified professional is preparing for your home.', active: ['Technician Assigned', 'Technician On The Way', 'Booking On Hold', 'Service Started', 'Service Completed'].includes(bookingStatus) },
-        { label: 'Technician On The Way', description: 'Our expert is travelling to your location.', active: ['Technician On The Way', 'Booking On Hold', 'Service Started', 'Service Completed'].includes(bookingStatus) },
-        { label: 'Booking On Hold', description: 'We have paused the booking for updates.', active: ['Booking On Hold', 'Service Started', 'Service Completed'].includes(bookingStatus) },
-        { label: 'Service Started', description: 'Work has begun at your home.', active: ['Service Started', 'Service Completed'].includes(bookingStatus) },
-        { label: 'Service Completed', description: 'We have completed the job and checked quality.', active: ['Service Completed'].includes(bookingStatus) }
+        { label: 'Pending', description: 'Your service request is confirmed.', active: ['Pending', 'Technician Assigned', 'On The Way', 'Holding', 'Completed', 'Cancelled'].includes(bookingStatus) },
+        { label: 'Technician Assigned', description: 'A verified professional is preparing for your home.', active: ['Technician Assigned', 'On The Way', 'Holding', 'Completed'].includes(bookingStatus) },
+        { label: 'On The Way', description: 'Our expert is travelling to your location.', active: ['On The Way', 'Holding', 'Completed'].includes(bookingStatus) },
+        { label: 'Holding', description: 'We have paused the booking for updates.', active: ['Holding', 'Completed'].includes(bookingStatus) },
+        { label: 'Completed', description: 'We have completed the job and checked quality.', active: ['Completed'].includes(bookingStatus) }
       ];
-      const cancelled = bookingStatus === 'Booking Cancelled';
+      const cancelled = bookingStatus === 'Cancelled';
       timelineEl.innerHTML = steps.map((step) => `
         <div class="timeline-item ${step.active ? 'active' : ''} ${cancelled && step.label === 'Service Completed' ? 'cancelled' : ''}">
           <div class="timeline-dot"></div>
@@ -842,7 +919,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const bookingId = `UC-${Math.floor(10000 + Math.random() * 90000)}`;
       const serviceValue = serviceField?.value || initialService;
       const bookingTime = new Date().toLocaleString();
-      const booking = {
+      const booking = normalizeBookingRecord({
         id: bookingId,
         service: serviceValue,
         address: address.value.trim(),
@@ -853,9 +930,11 @@ document.addEventListener('DOMContentLoaded', () => {
         customerName: localStorage.getItem(AUTH_KEYS.name) || 'Guest',
         paymentMethod: 'Pending selection',
         paymentStatus: 'Pending',
+        bookingStatus: 'Pending',
         bookingTime,
-        createdAt: bookingTime
-      };
+        createdAt: bookingTime,
+        serviceDate: date.value
+      });
 
       const bookingAmount = getServiceAmount(serviceValue);
       const bookingPriceLabel = servicePriceField?.value || getServicePriceLabel(serviceValue);
@@ -870,6 +949,9 @@ document.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem(AUTH_KEYS.paymentMethod, 'Pending selection');
       localStorage.setItem(AUTH_KEYS.paymentStatus, 'Pending');
       localStorage.setItem(AUTH_KEYS.bookingTime, bookingTime);
+      saveBookingHistory(booking);
+      renderBookingHistory();
+      renderAdminPanel();
       showToast('Booking saved. Continue to payment.', 'success');
       window.setTimeout(() => window.location.href = 'payment.html', 400);
     });
@@ -938,7 +1020,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const paymentMethod = selectedPayment.value;
         const bookingId = localStorage.getItem(AUTH_KEYS.bookingId) || 'UC-1001';
         const bookingTime = localStorage.getItem(AUTH_KEYS.bookingTime) || new Date().toLocaleString();
-        const bookingRecord = {
+        const bookingRecord = normalizeBookingRecord({
           id: bookingId,
           service: localStorage.getItem(AUTH_KEYS.selectedService) || 'Chimney Basic Cleaning',
           address: localStorage.getItem(AUTH_KEYS.address) || 'Not provided',
@@ -953,12 +1035,14 @@ document.addEventListener('DOMContentLoaded', () => {
           bookingTime,
           createdAt: bookingTime,
           serviceDate: localStorage.getItem(AUTH_KEYS.date) || new Date().toISOString().slice(0, 10)
-        };
+        });
 
         localStorage.setItem(AUTH_KEYS.paymentMethod, paymentMethod);
         localStorage.setItem(AUTH_KEYS.paymentStatus, 'Completed');
         localStorage.setItem(AUTH_KEYS.bookingTime, bookingTime);
         saveBookingHistory(bookingRecord);
+        renderBookingHistory();
+        renderAdminPanel();
 
         showLoading('Finalizing your booking...');
         try {

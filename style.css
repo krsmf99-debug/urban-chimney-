@@ -213,7 +213,7 @@ body.drawer-open {
 
 .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; color: var(--primary-dark); }
 
-.brand img {
+.brand-logo {
   width: 46px; height: 46px; object-fit: contain; border-radius: 14px; padding: 4px;
   background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow);
 }
@@ -597,9 +597,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   margin-bottom: 20px;
 }
 
-#adminSearchInput {
-  flex: 1 1 320px;
-  min-width: 220px;
+#adminSearchInput,
+#adminPhoneSearch,
+.admin-toolbar select,
+.admin-toolbar input[type="date"] {
+  flex: 1 1 180px;
+  min-width: 180px;
   border: 1px solid rgba(15, 74, 156, 0.12);
   border-radius: 16px;
   padding: 14px 16px;
