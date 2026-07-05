@@ -396,9 +396,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const getAdminFilteredBookings = (history) => {
     const searchQuery = adminSearchQuery.trim().toLowerCase();
     const phoneQuery = adminPhoneSearchQuery.trim().toLowerCase();
+    const idQuery = adminIdSearchQuery.trim().toLowerCase();
+    const customerQuery = adminCustomerFilter;
     const dateQuery = adminDateFilter;
     const statusQuery = adminStatusFilter;
     const technicianQuery = adminTechnicianFilter;
+    const paymentQuery = adminPaymentFilter;
+    const serviceQuery = adminServiceFilter;
     const filterMode = adminFilterType || 'all';
 
     const filtered = history.filter((booking) => {
@@ -408,16 +412,24 @@ document.addEventListener('DOMContentLoaded', () => {
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
+      const paymentStatus = booking.paymentStatus || (normalizedStatus === 'Completed' ? 'Paid' : 'Pending');
       const matchesSearch = !searchQuery || searchText.includes(searchQuery);
       const matchesPhone = !phoneQuery || String(booking.mobile || '').toLowerCase().includes(phoneQuery);
+      const matchesId = !idQuery || String(booking.id || '').toLowerCase().includes(idQuery);
+      const matchesCustomer = customerQuery === 'all' || (booking.customerName || '').toLowerCase() === customerQuery;
       const matchesStatus = statusQuery === 'all' || normalizedStatus === statusQuery;
       const matchesTechnician = technicianQuery === 'all' || (booking.technician || '') === technicianQuery;
+      const matchesPayment = paymentQuery === 'all' || paymentStatus === paymentQuery;
+      const matchesService = serviceQuery === 'all' || (booking.service || '') === serviceQuery;
       const matchesDate = !dateQuery || bookingDateValue === dateQuery;
       const matchesMode = filterMode === 'all'
         || (filterMode === 'today' && isSameDay(bookingDateValue, new Date()))
         || (filterMode === 'pending' && normalizedStatus !== 'Completed' && normalizedStatus !== 'Cancelled')
-        || (filterMode === 'completed' && normalizedStatus === 'Completed');
-      return matchesSearch && matchesPhone && matchesStatus && matchesTechnician && matchesDate && matchesMode;
+        || (filterMode === 'confirmed' && normalizedStatus !== 'Pending' && normalizedStatus !== 'Cancelled')
+        || (filterMode === 'active' && ['Pending', 'Technician Assigned', 'On The Way', 'Holding'].includes(normalizedStatus))
+        || (filterMode === 'completed' && normalizedStatus === 'Completed')
+        || (filterMode === 'cancelled' && normalizedStatus === 'Cancelled');
+      return matchesSearch && matchesPhone && matchesId && matchesCustomer && matchesStatus && matchesTechnician && matchesPayment && matchesService && matchesDate && matchesMode;
     });
 
     return filtered.sort((left, right) => {
@@ -444,22 +456,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (statsContainer) {
       statsContainer.innerHTML = `
-        <div class="stat-card admin-stat-card">
+        <button class="stat-card admin-stat-card" type="button" data-admin-card="all">
           <span class="stat-label">Total Bookings</span>
           <strong>${history.length}</strong>
-        </div>
-        <div class="stat-card admin-stat-card">
+        </button>
+        <button class="stat-card admin-stat-card" type="button" data-admin-card="active">
           <span class="stat-label">Active Bookings</span>
           <strong>${pendingBookings.length}</strong>
-        </div>
-        <div class="stat-card admin-stat-card">
+        </button>
+        <button class="stat-card admin-stat-card" type="button" data-admin-card="completed">
           <span class="stat-label">Completed Bookings</span>
           <strong>${completedBookings.length}</strong>
-        </div>
-        <div class="stat-card admin-stat-card">
+        </button>
+        <button class="stat-card admin-stat-card" type="button" data-admin-card="today">
           <span class="stat-label">Today's Revenue</span>
           <strong>₹${todayRevenue.toLocaleString()}</strong>
-        </div>`;
+        </button>`;
     }
 
     if (emptyState) {
@@ -606,33 +618,78 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   const setupAdminPanel = () => {
-    const resetButton = document.getElementById('resetBookingsButton');
+    const resetButtons = [document.getElementById('resetBookingsButton'), document.getElementById('sidebarResetBookingsButton')];
     const searchInput = document.getElementById('adminSearchInput');
     const phoneInput = document.getElementById('adminPhoneSearch');
+    const idInput = document.getElementById('adminIdSearch');
+    const customerSelect = document.getElementById('adminCustomerFilter');
     const statusSelect = document.getElementById('adminStatusFilter');
     const technicianSelect = document.getElementById('adminTechnicianFilter');
+    const paymentSelect = document.getElementById('adminPaymentFilter');
+    const serviceSelect = document.getElementById('adminServiceFilter');
     const dateInput = document.getElementById('adminDateFilter');
     const filterButtons = document.querySelectorAll('.filter-btn');
     const tableWrap = document.getElementById('adminBookingsTable');
-    if (!resetButton || !tableWrap) return;
+    const statsContainer = document.getElementById('adminStats');
+    const drawerToggle = document.getElementById('adminDrawerToggle');
+    const drawerClose = document.getElementById('adminDrawerClose');
+    const drawerOverlay = document.getElementById('adminDrawerOverlay');
+    const sidebar = document.getElementById('adminSidebar');
+    const logoutButton = document.getElementById('sidebarLogoutButton');
+    const headerLogoutButton = document.getElementById('logoutButton');
+    if (!tableWrap) return;
 
-    resetButton.addEventListener('click', () => {
-      [AUTH_KEYS.bookingHistory, AUTH_KEYS.bookingId, AUTH_KEYS.selectedService, AUTH_KEYS.address, AUTH_KEYS.date, AUTH_KEYS.time, AUTH_KEYS.location, AUTH_KEYS.paymentMethod, AUTH_KEYS.bookingAmount].forEach((key) => localStorage.removeItem(key));
-      showToast('Demo bookings reset successfully.', 'success');
+    const resetAdminState = () => {
       adminSearchQuery = '';
       adminPhoneSearchQuery = '';
+      adminIdSearchQuery = '';
+      adminCustomerFilter = 'all';
       adminStatusFilter = 'all';
       adminTechnicianFilter = 'all';
+      adminPaymentFilter = 'all';
+      adminServiceFilter = 'all';
       adminDateFilter = '';
       adminEditingBookingId = null;
       adminDrafts = {};
       if (searchInput) searchInput.value = '';
       if (phoneInput) phoneInput.value = '';
+      if (idInput) idInput.value = '';
+      if (customerSelect) customerSelect.value = 'all';
       if (statusSelect) statusSelect.value = 'all';
       if (technicianSelect) technicianSelect.value = 'all';
+      if (paymentSelect) paymentSelect.value = 'all';
+      if (serviceSelect) serviceSelect.value = 'all';
       if (dateInput) dateInput.value = '';
       filterButtons.forEach((button) => button.classList.toggle('active', button.dataset.filter === 'all'));
-      renderAdminPanel();
+      adminFilterType = 'all';
+    };
+
+    const populateAdminSelects = () => {
+      const history = getBookingHistory();
+      if (customerSelect) {
+        const customers = [...new Set(history.map((booking) => booking.customerName).filter(Boolean))].sort();
+        customerSelect.innerHTML = '<option value="all">All customers</option>' + customers.map((customer) => `<option value="${customer.toLowerCase()}">${escapeHtml(customer)}</option>`).join('');
+      }
+      if (serviceSelect) {
+        const services = [...new Set(history.map((booking) => booking.service).filter(Boolean))].sort();
+        serviceSelect.innerHTML = '<option value="all">All services</option>' + services.map((service) => `<option value="${service}">${escapeHtml(service)}</option>`).join('');
+      }
+      if (paymentSelect) {
+        const paymentOptions = ['Pending', 'Paid', 'Partial'];
+        paymentSelect.innerHTML = '<option value="all">All payments</option>' + paymentOptions.map((option) => `<option value="${option}">${escapeHtml(option)}</option>`).join('');
+      }
+    };
+
+    resetButtons.forEach((button) => {
+      if (button) {
+        button.addEventListener('click', () => {
+          [AUTH_KEYS.bookingHistory, AUTH_KEYS.bookingId, AUTH_KEYS.selectedService, AUTH_KEYS.address, AUTH_KEYS.date, AUTH_KEYS.time, AUTH_KEYS.location, AUTH_KEYS.paymentMethod, AUTH_KEYS.bookingAmount].forEach((key) => localStorage.removeItem(key));
+          showToast('Demo bookings reset successfully.', 'success');
+          resetAdminState();
+          populateAdminSelects();
+          renderAdminPanel();
+        });
+      }
     });
 
     if (searchInput) {
@@ -645,6 +702,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (phoneInput) {
       phoneInput.addEventListener('input', (event) => {
         adminPhoneSearchQuery = event.target.value.trim();
+        renderAdminPanel();
+      });
+    }
+
+    if (idInput) {
+      idInput.addEventListener('input', (event) => {
+        adminIdSearchQuery = event.target.value.trim();
+        renderAdminPanel();
+      });
+    }
+
+    if (customerSelect) {
+      customerSelect.addEventListener('change', (event) => {
+        adminCustomerFilter = event.target.value;
         renderAdminPanel();
       });
     }
@@ -663,6 +734,20 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    if (paymentSelect) {
+      paymentSelect.addEventListener('change', (event) => {
+        adminPaymentFilter = event.target.value;
+        renderAdminPanel();
+      });
+    }
+
+    if (serviceSelect) {
+      serviceSelect.addEventListener('change', (event) => {
+        adminServiceFilter = event.target.value;
+        renderAdminPanel();
+      });
+    }
+
     if (dateInput) {
       dateInput.addEventListener('change', (event) => {
         adminDateFilter = event.target.value;
@@ -677,6 +762,56 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAdminPanel();
       });
     });
+
+    if (statsContainer) {
+      statsContainer.addEventListener('click', (event) => {
+        const targetButton = event.target.closest('[data-admin-card]');
+        if (!targetButton) return;
+        const cardType = targetButton.dataset.adminCard;
+        adminFilterType = cardType === 'all' ? 'all' : cardType;
+        filterButtons.forEach((button) => button.classList.toggle('active', button.dataset.filter === cardType));
+        renderAdminPanel();
+      });
+    }
+
+    const toggleSidebar = () => {
+      if (!sidebar) return;
+      const isOpen = sidebar.classList.toggle('open');
+      sidebar.setAttribute('aria-hidden', String(!isOpen));
+      if (drawerOverlay) {
+        drawerOverlay.classList.toggle('active', isOpen);
+        drawerOverlay.setAttribute('aria-hidden', String(!isOpen));
+      }
+    };
+
+    if (drawerToggle) {
+      drawerToggle.addEventListener('click', toggleSidebar);
+    }
+
+    if (drawerClose) {
+      drawerClose.addEventListener('click', toggleSidebar);
+    }
+
+    if (drawerOverlay) {
+      drawerOverlay.addEventListener('click', toggleSidebar);
+    }
+
+    if (logoutButton) {
+      logoutButton.addEventListener('click', () => {
+        localStorage.clear();
+        window.location.href = 'index.html';
+      });
+    }
+
+    if (headerLogoutButton) {
+      headerLogoutButton.addEventListener('click', () => {
+        localStorage.clear();
+        window.location.href = 'index.html';
+      });
+    }
+
+    populateAdminSelects();
+    resetAdminState();
 
     tableWrap.addEventListener('click', (event) => {
       const button = event.target.closest('button');
